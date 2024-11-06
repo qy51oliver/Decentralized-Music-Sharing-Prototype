@@ -26,7 +26,7 @@ def main():
         
         # Send a test message to connected peer
         time.sleep(1)  # Ensure connection is established
-        node.send_message("Hello from new peer!")
+        node.send_message(f"Hello from new peer at host {host} port {port}!")
 
 if __name__ == "__main__":
     main()
