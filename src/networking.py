@@ -38,13 +38,13 @@ class TrackerNode:
             
             while True:
                 client_socket, address = server_socket.accept()
-                print(f"Connection from {address}")
+                print(f"Connection from peer at {address}")
                 threading.Thread(target=self.handle_client, args=(client_socket,)).start()
 
     def handle_client(self, client_socket):
         """
-        Handles communication with a connected client. 
-        Receives messages from the client and sends a confirmation.
+        Handles communication with a connected peer. 
+        Receives requests from the peer and responds appropriately.
         
         Parameters:
         - client_socket (socket): The socket object for the connected client.
@@ -59,13 +59,8 @@ class TrackerNode:
             message = b''
             if request_type != "view_available": #view_available has no additional data to be sent
                 data = client_socket.recv(4096)
-                # if not data:  # Exit if no data is received
-                #     break
                 message += data
-                print(f"Received: {data.decode()}")
                 print(threading.get_ident())
-                # client_socket.sendall(b"Message received")  # Send confirmation to client
-            print("out of loop")
             if request_type == "register": #register ownership of a file to a node, making it available for peer downloads
                 host, _ = client_socket.getpeername()
                 str_message = message.decode().split(",") # message is sent in format filename,host_port (since client port is random, not server port)
@@ -77,22 +72,17 @@ class TrackerNode:
                 print("filename " + filename + " registered to " + host + ", " + str(port))
             elif request_type == "view_available": #view which files have been registered by nodes and are available to download
                 client_socket.sendall(str.encode(str(list(self.peer_dict.keys()))))
-            print("before get")
             if request_type == "get": # coordinate a file download
-                print("got to get")
                 str_message = message.decode().split(",") # message is sent in format filename,host_port (since client port is random, not server port)
                 filename = str_message[0]
-                print("get start")
+                host, _ = client_socket.getpeername()
                 port = int(str_message[1])
                 if filename not in self.peer_dict:
                     print("the requested file has no peers registered to it")
                 else:
-                    # header = b"peerlist"
-                    # header += b"\0" * (4096-len(header)) #padding
-                    # client_socket.sendall(header)
-                    peers = self.peer_dict[filename]
-                    client_socket.sendall(pickle.dumps(peers))
-                print("get sent")
+                    peerlist = self.peer_dict[filename]
+                    client_socket.sendall(pickle.dumps(peerlist))
+                    print("peerlist for file " + filename + " sent to " + host + ":" + str(port))
         client_socket.close()
                 
 
@@ -132,22 +122,20 @@ class PeerNode:
             server_socket.listen()
             print(f"Peer node listening on {self.host}:{self.port}")
             print("Commands:")
-            print("REGISTER <filename> <filepath> <host> <port>: register ownership of the file with the identifier filename and path filepath to yourself with the tracker at the specified IP and port")
+            print("REGISTER <filename> <src_filepath> <host> <port>: register ownership of the file with the identifier filename and path filepath to yourself with the tracker at the specified IP and port")
             print("VIEW_AVAILABLE <host> <port>: view files that have been registered with the tracker and are available to be downloaded")
-            print("GET <filename> <filepath> <host> <port>: ask tracker at host and port to coordinate a download of filename from a peer to local path filepath")
+            print("GET <filename> <dst_filepath> <host> <port>: ask tracker at host and port to coordinate a download of filename from a peer to local path filepath")
             
             threading.Thread(target=self.handle_user_input).start()
             while True:
                 client_socket, address = server_socket.accept()
                 print(f"Connection from {address}")
                 threading.Thread(target=self.handle_client, args=(client_socket,)).start()
-            # while True:
-            #     client_socket, address = server_socket.accept()
-            #     print(f"Connection from {address}")
-            #     # threading.Thread(target=self.handle_client, args=(client_socket,)).start()
-            #     threading.Thread(target=self.handle_client_file, args=(client_socket,)).start()
     
     def handle_user_input(self):
+        """
+        Allows the user to input commands to a peer node's CLI, and handles those commands appropriately.
+        """
         while True:
             command = input("What would you like to do?\n").strip().lower()
             command_split = command.split(" ")
@@ -179,6 +167,15 @@ class PeerNode:
                     self.download_file_from_peer(peerlist, filename, filepath)
     
     def download_file_from_peer(self, peerlist, filename, filepath):
+        """
+        Initiates a peer-to-peer download.
+        Pick a peer from the peerlist, request that peer to send the file filename, and download it to dst filepath.
+        
+        Parameters:
+        - peerlist (list(tuple(str, int))): A list of peers with the file filename.
+        - filename (str): The filename to be downloaded
+        - filepath (str): The dst path to download the file to.
+        """
         host, ip = random.choice(peerlist) # choose a random peer (this should be more sophisticated)
         peer_socket = self.connect_to_node(host, ip)
         header = b"file_request"
@@ -187,7 +184,6 @@ class PeerNode:
         peer_socket.send(str.encode(filename))
         
         response_header = peer_socket.recv(4096).decode()
-        print(response_header)
         if response_header != "file_response":
             print("response header malformed, should be file_response")
         else:
@@ -200,9 +196,19 @@ class PeerNode:
                     file_bytes += data
         with open(filepath, 'wb') as downloaded_file:
             downloaded_file.write(file_bytes)
+        print("file downloaded successfully")
         
 
     def register_with_tracker(self, filename, host, port):
+        """
+        Registers the file represented by filename with the tracker at host and port.
+        This signals to the tracker that the client possesses ownership of the file and can be counted on to distribute it to peers.
+        
+        Parameters:
+        - filename (str): The filename being registered
+        - host (str): The IP of the tracker.
+        - port (int): The port of the tracker.
+        """
         header = b"register"
         header += b"\0" * (4096-len(header)) #padding
         tracker_socket = self.connect_to_node(host, port)
@@ -210,6 +216,13 @@ class PeerNode:
         tracker_socket.sendall(str.encode(filename+","+str(self.port))) #necessary to pass along server port since client port is different and randomly allocated
     
     def get_available_files(self, host, port):
+        """
+        Requests a list of available files currently being tracked by the tracker and prints it.
+        
+        Parameters:
+        - host (str): The IP of the tracker.
+        - port (int): The port of the tracker.
+        """
         header = b"view_available"
         header += b"\0" * (4096-len(header)) #padding
         tracker_socket = self.connect_to_node(host, port)
@@ -224,6 +237,17 @@ class PeerNode:
         print("Available files: " + available_files.decode())
     
     def get_peerlist_from_tracker(self, filename, host, port):
+        """
+        Requests a list of peers registered to a filename from the tracker and returns it.
+        
+        Parameters:
+        - filename (str): The filename we want the peers for.
+        - host (str): The IP of the tracker.
+        - port (int): The port of the tracker.
+
+        Returns:
+        - peerlist (list(tuple(str, int))): The peerlist of (host, port) tuples registered to the requested filename.
+        """
         header = b"get"
         header += b"\0" * (4096-len(header)) #padding
         tracker_socket = self.connect_to_node(host, port)
@@ -243,7 +267,7 @@ class PeerNode:
     def handle_client(self, client_socket):
         """
         Handles communication with a connected client. 
-        Receives messages from the client and sends a confirmation.
+        Receives messages from the client. If the message is a file_request, send a file_response with send_file().
         
         Parameters:
         - client_socket (socket): The socket object for the connected client.
@@ -261,32 +285,17 @@ class PeerNode:
                     self.send_file(filename, client_socket)
                     break #necessary since socket is closed in send_file, rerunning the loop would try to recv from closed socket
 
-    
-    def handle_client_file(self, client_socket):
+    def connect_to_node(self, host, port):
         """
-        Handles communication with a connected client. 
-        Receives messages from the client and sends a confirmation.
+        Connects to another node in the network.
         
         Parameters:
-        - client_socket (socket): The socket object for the connected client.
+        - host (str): The IP address of the node to connect to.
+        - port (int): The port number of the port to connect to.
+
+        Returns:
+        - node_socket (socket): the node socket with an open connection.
         """
-        print("here")
-        header = client_socket.recv(4096).rstrip(b"\0") # strip padding bytes
-        print(header.decode().strip())
-        if not header or header.decode().strip() != "peerlist":
-            print("peerlist responses must include a 4096 byte header with the word peerlist")
-            sys.exit(1)
-        message = b""
-        while True:
-            data = client_socket.recv(4096)
-            if not data:  # Exit if no data is received
-                break
-            message += data
-        peerlist = pickle.loads(message)
-        print(peerlist)
-
-
-    def connect_to_node(self, host, port):
         node_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         node_socket.connect((host, port))
         print(f"Connected to node {host}:{port}")
@@ -322,23 +331,27 @@ class PeerNode:
 
     def send_file(self, filename, client_socket):
         """
-        Sends a file to all connected peers.
+        Sends a file to client_socket.
         
         Parameters:
-        - filename (str): The file to be sent to each peer.
+        - filename (str): The file to be sent.
+        - client_socket (socket): The socket to send the connection to.
         """
+        chunk_number = 0
         client_socket.sendall(b"file_response")
         if filename not in self.files:
             client_socket.sendall("file not owned by this peer!") # this shouldn't happen if the tracker has an up to date peerlist
         filepath = self.files[filename]
         try:
-            file = open(filepath)
+            file = open(filepath, 'rb')
             data = file.read(4096)
             print("about to send file")
             while data:
-                print("sending file!")
-                client_socket.sendall(data.encode())
+                print("sending chunk number " + str(chunk_number))
+                chunk_number += 1
+                client_socket.sendall(data)
                 data = file.read(4096)
+            print("file send complete")
             file.close()
             client_socket.close()
         except Exception as e:
