@@ -10,47 +10,44 @@ def main():
     if len(sys.argv) != 4:
         print("Usage: python main.py <host> <port> tracker/peer")
         sys.exit(1)
-
-    if sys.argv[3] == "peer":
-        start_peer()
+    # Parse input arguments    
+    host = sys.argv[1]
+    try:
+        port = int(sys.argv[2])
+        if not (0 < port < 65536):
+            raise ValueError("Port must be in range 1-65535.")
+    except ValueError as e:
+        print(f"Invalid port: {e}")
+        sys.exit(1)
+    
+    node_type = sys.argv[3].lower()
+    if node_type == "peer":
+        start_peer(host, port)
+    elif node_type == "tracker":
+        start_tracker(host, port)
     else:
-        start_tracker()
+        print("Invalid node type. Use 'tracker' or 'peer'.")
+        sys.exit(1)
 
-def start_peer():
-    host = sys.argv[1]
-    port = int(sys.argv[2])
-
+def start_peer(host, port):
     # Initialize and start the peer node
-    node = PeerNode(host, port)
-    node.start()
+    try:
+        print(f"Starting peer node on {host}:{port}...")
+        node = PeerNode(host, port)
+        node.start()
+    except Exception as e:
+        print(f"Error starting peer node: {e}")
+        sys.exit(1)
 
-    # # Optionally connect to a peer
-    # peer_host = input("Enter peer host to connect (or press Enter to skip): ")
-    # if peer_host:
-    #     peer_port = int(input("Enter peer port to connect: "))
-    #     node.connect_to_peer(peer_host, peer_port)
-        
-    #     # Send a test message to connected peer
-    #     time.sleep(1)  # Ensure connection is established
-    #     node.send_message("Hello from new peer!")
-
-def start_tracker():
-    host = sys.argv[1]
-    port = int(sys.argv[2])
-
+def start_tracker(host, port):
     # Initialize and start the tracker node
-    node = TrackerNode(host, port)
-    node.start()
-
-    # # Optionally connect to a peer
-    # peer_host = input("Enter peer host to connect (or press Enter to skip): ")
-    # if peer_host:
-    #     peer_port = int(input("Enter peer port to connect: "))
-    #     node.connect_to_peer(peer_host, peer_port)
-        
-    #     # Send a test message to connected peer
-    #     time.sleep(1)  # Ensure connection is established
-    #     node.send_message("Hello from new peer!")
+    try:
+        print(f"Starting tracker node on {host}:{port}...")
+        node = TrackerNode(host, port)
+        node.start()
+    except Exception as e:
+        print(f"Error starting tracker node: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
