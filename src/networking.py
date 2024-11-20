@@ -18,13 +18,17 @@ class TrackerNode:
         self.host = host
         self.port = port
         self.peer_dict = {} # key=filename, val=list of tuples (ip, port) that have the file available
+        self.last_heartbeat = {}  # key=(host, port), value=last heartbeat timestamp
 
     def start(self):
         """
         Starts the peer node by launching a thread to listen for incoming connections.
+        & Clean up stale peers
         """
         server_thread = threading.Thread(target=self.listen_for_connections)
         server_thread.start()
+        cleanup_thread = threading.Thread(target=self.remove_stale_peers)
+        cleanup_thread.start()
 
     def listen_for_connections(self):
         """
@@ -54,13 +58,16 @@ class TrackerNode:
             if not header:
                 print("requests must include a 4096 byte header with the request type")
                 sys.exit(1)
+                
             request_type = header.decode().strip()
             print("request_type: " + request_type)
             message = b''
+            
             if request_type != "view_available": #view_available has no additional data to be sent
                 data = client_socket.recv(4096)
                 message += data
                 print(threading.get_ident())
+                
             if request_type == "register": #register ownership of a file to a node, making it available for peer downloads
                 host, _ = client_socket.getpeername()
                 str_message = message.decode().split(",") # message is sent in format filename,host_port (since client port is random, not server port)
@@ -69,23 +76,52 @@ class TrackerNode:
                 if filename not in self.peer_dict:
                     self.peer_dict[filename] = []
                 self.peer_dict[filename].append((host, port))
-                print("filename " + filename + " registered to " + host + ", " + str(port))
+                self.last_heartbeat[(host, port)] = time.time()
+                print("Filename " + filename + " registered to " + host + ", " + str(port))
+                
             elif request_type == "view_available": #view which files have been registered by nodes and are available to download
                 client_socket.sendall(str.encode(str(list(self.peer_dict.keys()))))
+                
             if request_type == "get": # coordinate a file download
                 str_message = message.decode().split(",") # message is sent in format filename,host_port (since client port is random, not server port)
                 filename = str_message[0]
                 host, _ = client_socket.getpeername()
                 port = int(str_message[1])
                 if filename not in self.peer_dict:
-                    print("the requested file has no peers registered to it")
+                    print("The requested file has no peers registered to it")
                 else:
                     peerlist = self.peer_dict[filename]
                     client_socket.sendall(pickle.dumps(peerlist))
-                    print("peerlist for file " + filename + " sent to " + host + ":" + str(port))
-        client_socket.close()
+                    print("Peerlist for file " + filename + " sent to " + host + ":" + str(port))
+                    
+            if request_type in ["register", "view_available", "get"]:
+                host, port = client_socket.getpeername()
+                self.last_heartbeat[(host, port)] = time.time()
+                print(f"Heartbeat received from {host}:{port}")
+    
+    def remove_stale_peers(self):
+        """
+        Periodically removes peers that have not sent a heartbeat within a certain time.
+        """
+        while True:
+            time.sleep(10) # Check every 10 seconds
+            current_time = time.time()
+            timeout = 45 # The time a peer waits to be stale
+            for filename in list(self.peer_dict.keys()):
+                updated_peers = []
+                removed_peers = []
+                for host, port in self.peer_dict[filename]:
+                    # Check if the peer's last heartbeat is within the timeout
+                    last_heartbeat = self.last_heartbeat.get((host, port), 0)
+                    if current_time - last_heartbeat <= timeout:
+                        updated_peers.append((host, port))
+                    else:
+                        removed_peers.append((host, port))
                 
-
+                self.peer_dict[filename] = updated_peers
+                if removed_peers:
+                    print(f"Removed stale peers for '{filename}': {removed_peers}")
+            
 class PeerNode:
     """
     PeerNode class that represents a single peer in the P2P network.
