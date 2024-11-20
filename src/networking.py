@@ -106,7 +106,7 @@ class TrackerNode:
         while True:
             time.sleep(10) # Check every 10 seconds
             current_time = time.time()
-            timeout = 45 # The time a peer waits to be stale
+            timeout = 300 # The time a peer waits to be stale
             for filename in list(self.peer_dict.keys()):
                 updated_peers = []
                 removed_peers = []
