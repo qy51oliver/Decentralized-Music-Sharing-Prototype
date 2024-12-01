@@ -5,51 +5,51 @@
 - [Features](#features)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
-- [Implementation Details](#code-details)
-- [Testing](#testing)
 - [Comments](#comments)
 
 ---
 
 ## Overview
 
-The **Decentralized Music Sharing Prototype** is a peer-to-peer (P2P) file-sharing system focused on creating a basic, decentralized network for music sharing. This prototype uses P2P networking principles to allow nodes (peers) to connect, communicate, and share data with each other without relying on a central server. 
+The **Decentralized Music Sharing Prototype** is a peer-to-peer (P2P) file-sharing system inspired by the BitTorrent protocol. Initially focused on music sharing, it evolved into a framework for sharing files of any format. The system leverages a tracker node to facilitate peer discovery and decentralized file sharing, ensuring data consistency and reliability.
 
-### Goals
+The system uses a central tracker node to maintain a registry of files and their associated peers. Peers can:
 
-- **Peer Connections**: Set up a network where peers can connect directly to each other, without a central server.
-
-- **Basic File Sharing**: Let peers share music files with each other directly. The idea is to keep it simple but effective in sending files between connected users.
-
-- **Consistency Across Peers**: Make sure files are consistent across the network so everyone has the same version. This might mean adding some checks to keep everything in sync.
-
-- **Easy Network Expansion**: New users should be able to join the network smoothly, and the network should still work well as more people connect.
-
-- **Reliable Connections**: Add basic checks for handling errors, like dropped connections or failed messages, so the network keeps running smoothly.
+- Register files they host.
+- Query the tracker for peers hosting a requested file.
+- Download files in chunks from multiple peers simultaneously.
 
 ## Features
 
-### Implemented Features (not tested)
+### Implemented Features
 
-1. **Peer-to-Peer Connections**: Nodes can connect directly to other peers using an IP address and port.
-2. **Basic Message Exchange**: Nodes can send and receive simple messages from other connected peers.
-3. **Dynamic Node Addition**: New nodes can join the network and connect to existing peers.
+1. **Tracker Nodes**:
+  - Maintains a centralized registry of files and associated peers.
+  - Validates file integrity using hash checks during registration.
+  - Removes stale peers using a heartbeat mechanism.
+2. **Peer-to-Peer File Sharing**:
+  - Supports downloading files in 4KB chunks from multiple peers simultaneously.
+  - Reattempts failed chunk downloads up to three times to ensure fault tolerance.
+3. **Concurrency:**:
+  - Multi-threaded download pools to enhance efficiency.
+4. **Dynamic Node Management**:
+  - Allows peers to join or leave the network dynamically.
 
-### To-do (add here)
+### Planned Features
 
-1. **File Sharing**: Extend functionality to support the transfer of music files directly between peers.
-2. **Data Consistency**: Ensure files remain consistent across nodes, so each peer has the latest versions.
-3. **Improved Scalability**: Optimize the network to maintain performance as more nodes join and the network grows.
-4. **Basic Error Handling**: Implement simple error-handling to manage connection issues or message failures, making the network more resilient.
+1. **File Prioritization**:
+  - Introduce incentives mechanisms, such as tit-for-tat.
+2. **Scalability**:
+  - Optimize performance for larger networks.
 
-## Project Structure (current, subject to change)
+## Project Structure
 
 The project structure is currently organized as follows:
 
 ```plaintext
 Decentralized-Music-Sharing-Prototype/
 ├── src/
-│   ├── networking.py         # Currently, PeerNode inside this file.
+│   ├── networking.py
 │   └── main.py               
 ├── README.md                 
 ├── .gitignore                
@@ -57,27 +57,36 @@ Decentralized-Music-Sharing-Prototype/
 
 ## Getting Started
 
-### Install Dependencies
 
-1. Please save the installed depenencies to requirements.txt (Currently, there are no external libraries required beyond Python's standard library.
-)
-
-
-### Start running
+### Starting a Node
 
 ```plaintext
-python src/main.py <host> <port>
+python src/main.py <host> <port> <peer/tracker>
 ```
 
-### Connecting to Other Nodes:
+- < host >: The IP address of the node.
+- < port >: The port number to bind the node.
+- < peer / tracker >: Specify whether the node acts as a peer or a tracker.
 
+### Commands for a Peer Node
 
+Register a file:
+```plaintext
+REGISTER <filename> <src_filepath> <tracker_host> <tracker_port>
+```
+Register a file with the tracker, providing the filename and its path.
 
-## Implementation Details
+View available files:
+```plaintext
+VIEW_AVAILABLE <tracker_host> <tracker_port>
+```
+List all files currently registered with the tracker.
 
-
-## Testing
-
+Download a file:
+```plaintext
+GET <filename> <dst_filepath> <tracker_host> <tracker_port>
+```
+Download a file from peers listed by the tracker.
 
 
 ## Comments
